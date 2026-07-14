@@ -35,6 +35,7 @@ export interface PostieAPI {
   users: {
     login: (username: string, password: string) => Promise<User | null>
     autoLogin: () => Promise<User | undefined>
+    getById: (id: number) => Promise<User | undefined>
     list: () => Promise<User[]>
   }
   products: {
@@ -84,6 +85,7 @@ const api: PostieAPI = {
   users: {
     login: (u, p) => ipcRenderer.invoke('users:login', u, p),
     autoLogin: () => ipcRenderer.invoke('users:autoLogin'),
+    getById: (id) => ipcRenderer.invoke('users:getById', id),
     list: () => ipcRenderer.invoke('users:list')
   },
   products: {

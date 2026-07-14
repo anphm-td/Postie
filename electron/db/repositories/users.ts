@@ -52,6 +52,14 @@ export function listAll(): User[] {
   ).all() as User[]
 }
 
+/** Get a user by id (without password_hash). Used to restore a saved session. */
+export function getById(id: number): User | undefined {
+  return getDb().prepare(
+    `SELECT id, username, display_name, role, is_active, created_at
+       FROM users WHERE id = ?`
+  ).get(id) as User | undefined
+}
+
 /**
  * Return the first active admin user, without password verification.
  * Used for the auto-login flow (dev / single-operator mode) where the

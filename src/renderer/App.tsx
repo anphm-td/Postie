@@ -3,12 +3,13 @@
 // ----------------------------------------------------------------------------
 //  Simple state-based routing (no react-router needed for a few screens).
 //  The guard enforces: not logged in -> Login; logged in but no active shift
-//  -> ShiftOpen; otherwise -> Register (main sales screen). Admin/manager
-//  screens are reachable from a sidebar once authenticated.
+//  -> ShiftOpen; otherwise -> the main app shell. Admin/manager screens are
+//  reachable from a sidebar once authenticated.
 // ============================================================================
 
 import React, { useState } from 'react'
 import { AuthProvider, useAuth } from '@renderer/context/AuthContext'
+import { Login } from '@renderer/routes/Login'
 import { ShiftOpen } from '@renderer/routes/ShiftOpen'
 import { Register } from '@renderer/routes/Register'
 import { Products } from '@renderer/routes/Products'
@@ -19,17 +20,15 @@ import { useShiftGuard } from '@renderer/hooks/useShiftGuard'
 type Screen = 'register' | 'products' | 'customers' | 'reports'
 
 function Shell() {
-  const { user, activeShift, loading, refreshShift } = useAuth()
+  const { user, activeShift, loading, refreshShift, logout } = useAuth()
   const { needsShift, shiftLoading } = useShiftGuard()
   const [screen, setScreen] = useState<Screen>('register')
   const [showClose, setShowClose] = useState(false)
 
-  if (loading || shiftLoading) {
+  if (loading || (user && shiftLoading)) {
     return <div className="flex h-screen items-center justify-center text-muted-foreground">Đang tải…</div>
   }
-  if (!user) {
-    return <div className="flex h-screen items-center justify-center text-destructive">Không tìm thấy admin. Chạy npm run db:init trước.</div>
-  }
+  if (!user) return <Login />
   if (needsShift) return <ShiftOpen />
 
   return (
@@ -46,16 +45,22 @@ function Shell() {
           <NavBtn active={screen === 'reports'} onClick={() => setScreen('reports')}>Báo cáo</NavBtn>
           <NavBtn active={screen === 'customers'} onClick={() => setScreen('customers')}>Khách hàng</NavBtn>
         </nav>
-        {activeShift && (
-          <div className="border-t p-2">
+        <div className="border-t p-2 space-y-1">
+          {activeShift && (
             <button
               onClick={() => setShowClose(true)}
               className="w-full text-left px-3 py-2 rounded-md text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
               Đóng ca
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={logout}
+            className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground transition-colors hover:bg-accent"
+          >
+            Đăng xuất
+          </button>
+        </div>
       </aside>
 
       {/* Main */}

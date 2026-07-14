@@ -1,21 +1,25 @@
 // ============================================================================
 //  Postie POS - Auth context
 // ----------------------------------------------------------------------------
-//  Auto-login mode: on mount, fetches the default admin via api.users.autoLogin
-//  (no password) and uses it as the current user. There is no login screen.
-//  The active shift (if any) is also fetched so every screen knows whether
-//  the cashier can ring sales.
+//  Real login: the cashier enters username + password, verified against the
+//  bcrypt hash in the DB via api.users.login. On success the user id is saved
+//  to localStorage so reopening the app restores the session without
+//  re-entering credentials (api.users.getById). logout() clears both the
+//  saved session and the in-memory state, returning to the Login screen.
 // ============================================================================
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { api } from '@renderer/lib/api'
 import type { User, Shift } from '@shared/types'
 
+const SESSION_KEY = 'postie.session.userId'
+
 interface AuthState {
   user: User | null
   activeShift: Shift | null
-  loading: boolean          // true during initial auto-login
+  loading: boolean          // true during initial session restore
   refreshShift: () => Promise<void>
+  login: (username: string, password: string) => Promise<boolean>
   logout: () => void
 }
 
@@ -26,11 +30,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeShift, setActiveShift] = useState<Shift | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Auto-login: fetch the default admin on mount. No password prompt.
+  // On mount, restore a saved session (if any) by fetching the user by id.
   useEffect(() => {
     let cancelled = false
-    api.users.autoLogin()
-      .then((u) => { if (!cancelled) setUser(u ?? null) })
+    const savedId = Number(localStorage.getItem(SESSION_KEY))
+    if (!savedId) {
+      setLoading(false)
+      return
+    }
+    api.users.getById(savedId)
+      .then((u) => { if (!cancelled) setUser(u && u.is_active === 1 ? u : null) })
       .catch(() => { if (!cancelled) setUser(null) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -49,14 +58,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Whenever the user changes, re-fetch their active shift.
   useEffect(() => { void refreshShift() }, [user, refreshShift])
 
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
+    const u = await api.users.login(username, password)
+    if (u) {
+      localStorage.setItem(SESSION_KEY, String(u.id))
+      setUser(u)
+      return true
+    }
+    return false
+  }, [])
+
   const logout = useCallback(() => {
-    // In auto-login mode logout just clears state; re-mount re-logs in.
+    localStorage.removeItem(SESSION_KEY)
     setUser(null)
     setActiveShift(null)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, activeShift, loading, refreshShift, logout }}>
+    <AuthContext.Provider value={{ user, activeShift, loading, refreshShift, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

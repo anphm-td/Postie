@@ -35,6 +35,7 @@ export function registerIpc(): void {
   )
   ipcMain.handle('users:autoLogin', () => usersRepo.getDefaultAdmin())
   ipcMain.handle('users:list', () => usersRepo.listAll())
+  ipcMain.handle('users:getById', (_e, id: number) => usersRepo.getById(id))
 
   // ---- Products ----------------------------------------------------------
   ipcMain.handle('products:list', (_e, opts: ListProductsOptions = {}) =>
