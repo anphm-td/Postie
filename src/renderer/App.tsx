@@ -1,0 +1,109 @@
+// ============================================================================
+//  Postie POS - App root with route guard
+// ----------------------------------------------------------------------------
+//  Simple state-based routing (no react-router needed for a few screens).
+//  The guard enforces: not logged in -> Login; logged in but no active shift
+//  -> ShiftOpen; otherwise -> Register (main sales screen). Admin/manager
+//  screens are reachable from a sidebar once authenticated.
+// ============================================================================
+
+import React, { useState } from 'react'
+import { AuthProvider, useAuth } from '@renderer/context/AuthContext'
+import { ShiftOpen } from '@renderer/routes/ShiftOpen'
+import { Register } from '@renderer/routes/Register'
+import { Products } from '@renderer/routes/Products'
+import { Reports } from '@renderer/routes/Reports'
+import { CloseShiftDialog } from '@renderer/components/pos/CloseShiftDialog'
+import { useShiftGuard } from '@renderer/hooks/useShiftGuard'
+
+type Screen = 'register' | 'products' | 'customers' | 'reports'
+
+function Shell() {
+  const { user, activeShift, loading, refreshShift } = useAuth()
+  const { needsShift, shiftLoading } = useShiftGuard()
+  const [screen, setScreen] = useState<Screen>('register')
+  const [showClose, setShowClose] = useState(false)
+
+  if (loading || shiftLoading) {
+    return <div className="flex h-screen items-center justify-center text-muted-foreground">Đang tải…</div>
+  }
+  if (!user) {
+    return <div className="flex h-screen items-center justify-center text-destructive">Không tìm thấy admin. Chạy npm run db:init trước.</div>
+  }
+  if (needsShift) return <ShiftOpen />
+
+  return (
+    <div className="flex h-screen">
+      {/* Sidebar */}
+      <aside className="w-56 border-r bg-card flex flex-col">
+        <div className="p-4 border-b">
+          <div className="font-semibold">Postie POS</div>
+          <div className="text-xs text-muted-foreground mt-1">{user.display_name}</div>
+        </div>
+        <nav className="flex-1 p-2 space-y-1">
+          <NavBtn active={screen === 'register'} onClick={() => setScreen('register')}>Bán hàng</NavBtn>
+          <NavBtn active={screen === 'products'} onClick={() => setScreen('products')}>Kho hàng</NavBtn>
+          <NavBtn active={screen === 'reports'} onClick={() => setScreen('reports')}>Báo cáo</NavBtn>
+          <NavBtn active={screen === 'customers'} onClick={() => setScreen('customers')}>Khách hàng</NavBtn>
+        </nav>
+        {activeShift && (
+          <div className="border-t p-2">
+            <button
+              onClick={() => setShowClose(true)}
+              className="w-full text-left px-3 py-2 rounded-md text-sm text-destructive transition-colors hover:bg-destructive/10"
+            >
+              Đóng ca
+            </button>
+          </div>
+        )}
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 overflow-hidden">
+        {screen === 'register' && <Register />}
+        {screen === 'products' && <Products />}
+        {screen === 'customers' && <Placeholder title="Khách hàng & công nợ" />}
+        {screen === 'reports' && <Reports />}
+      </main>
+
+      {showClose && (
+        <CloseShiftDialog
+          shift={activeShift}
+          userName={user.display_name}
+          onClose={() => setShowClose(false)}
+          onClosed={refreshShift}
+        />
+      )}
+    </div>
+  )
+}
+
+function NavBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+        active ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Placeholder({ title }: { title: string }) {
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-semibold">{title}</h1>
+      <p className="text-muted-foreground mt-2">Màn hình này sẽ được xây dựng ở bước sau.</p>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Shell />
+    </AuthProvider>
+  )
+}
