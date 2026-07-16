@@ -2,28 +2,40 @@
 //  Postie POS - App root with route guard
 // ----------------------------------------------------------------------------
 //  Simple state-based routing (no react-router needed for a few screens).
-//  The guard enforces: not logged in -> Login; logged in but no active shift
-//  -> ShiftOpen; otherwise -> the main app shell. Admin/manager screens are
-//  reachable from a sidebar once authenticated.
+//  The guard enforces: DB not set up -> FirstRunSetup; not logged in ->
+//  Login; logged in but no active shift -> ShiftOpen; otherwise -> the main
+//  app shell. Admin/manager screens are reachable from a sidebar once
+//  authenticated.
 // ============================================================================
 
 import React, { useState } from 'react'
 import { AuthProvider, useAuth } from '@renderer/context/AuthContext'
+import { FirstRunSetup } from '@renderer/routes/FirstRunSetup'
 import { Login } from '@renderer/routes/Login'
 import { ShiftOpen } from '@renderer/routes/ShiftOpen'
 import { Register } from '@renderer/routes/Register'
 import { Products } from '@renderer/routes/Products'
 import { Reports } from '@renderer/routes/Reports'
 import { CloseShiftDialog } from '@renderer/components/pos/CloseShiftDialog'
+import { useSetupGuard } from '@renderer/hooks/useSetupGuard'
 import { useShiftGuard } from '@renderer/hooks/useShiftGuard'
 
 type Screen = 'register' | 'products' | 'customers' | 'reports'
 
 function Shell() {
+  const { needsSetup, setupLoading, recheck } = useSetupGuard()
   const { user, activeShift, loading, refreshShift, logout } = useAuth()
   const { needsShift, shiftLoading } = useShiftGuard()
   const [screen, setScreen] = useState<Screen>('register')
   const [showClose, setShowClose] = useState(false)
+
+  // Fresh install / freshly downloaded .exe: no DB or no users yet. This
+  // must be checked before anything auth-related — there's no admin to log
+  // in as until this screen creates one.
+  if (setupLoading) {
+    return <div className="flex h-screen items-center justify-center text-muted-foreground">Đang tải…</div>
+  }
+  if (needsSetup) return <FirstRunSetup onDone={recheck} />
 
   if (loading || (user && shiftLoading)) {
     return <div className="flex h-screen items-center justify-center text-muted-foreground">Đang tải…</div>

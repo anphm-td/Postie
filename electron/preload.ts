@@ -31,6 +31,8 @@ import type {
 export interface PostieAPI {
   db: {
     isReady: () => Promise<boolean>
+    needsSetup: () => Promise<boolean>
+    initialize: (password: string) => Promise<boolean>
   }
   users: {
     login: (username: string, password: string) => Promise<User | null>
@@ -80,7 +82,9 @@ export interface PostieAPI {
 
 const api: PostieAPI = {
   db: {
-    isReady: () => ipcRenderer.invoke('db:isReady')
+    isReady: () => ipcRenderer.invoke('db:isReady'),
+    needsSetup: () => ipcRenderer.invoke('db:needsSetup'),
+    initialize: (password) => ipcRenderer.invoke('db:initialize', password)
   },
   users: {
     login: (u, p) => ipcRenderer.invoke('users:login', u, p),

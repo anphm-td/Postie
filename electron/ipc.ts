@@ -13,7 +13,7 @@ import * as ordersRepo from './db/repositories/orders.js'
 import * as shiftsRepo from './db/repositories/shifts.js'
 import * as customersRepo from './db/repositories/customers.js'
 import * as paymentMethodsRepo from './db/repositories/payment-methods.js'
-import { getDb } from './db/connection.js'
+import { getDb, needsFirstRunSetup, initializeDatabase } from './db/connection.js'
 import type {
   CreateOrderInput,
   CreateProductInput,
@@ -29,6 +29,26 @@ import type {
 } from './db/repositories/customers.js'
 
 export function registerIpc(): void {
+  // ---- First-run setup -----------------------------------------------------
+  // Replaces the old `electron . --init-db` CLI flow (readline password
+  // prompt), which cannot work once the app is launched as a packaged .exe.
+  // The renderer checks db:needsSetup on startup and, if true, shows a
+  // FirstRunSetup screen that calls db:initialize with a password the store
+  // owner types into a normal form.
+  ipcMain.handle('db:needsSetup', () => needsFirstRunSetup())
+  ipcMain.handle('db:initialize', (_e, adminPassword: string) => {
+    initializeDatabase(adminPassword)
+    return true
+  })
+  ipcMain.handle('db:isReady', () => {
+    try {
+      getDb()
+      return true
+    } catch {
+      return false
+    }
+  })
+
   // ---- Users -------------------------------------------------------------
   ipcMain.handle('users:login', (_e, username: string, password: string) =>
     usersRepo.login(username, password)
@@ -56,9 +76,6 @@ export function registerIpc(): void {
   ipcMain.handle('products:deactivate', (_e, id: number) =>
     productsRepo.deactivate(id)
   )
-  // Manual stock change (receiving, wastage, stock-take). Uses the same
-  // adjustStock path as sales — the trigger syncs products.stock and rolls
-  // back if it would go negative. Returns the updated product row.
   ipcMain.handle('products:adjustStock', (_e, params: {
     productId: number
     delta: number
@@ -126,14 +143,4 @@ export function registerIpc(): void {
 
   // ---- Payment methods ---------------------------------------------------
   ipcMain.handle('payment_methods:list', () => paymentMethodsRepo.list())
-
-  // ---- Misc --------------------------------------------------------------
-  ipcMain.handle('db:isReady', () => {
-    try {
-      getDb()
-      return true
-    } catch {
-      return false
-    }
-  })
 }

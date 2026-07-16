@@ -1,6 +1,6 @@
 {
   "name": "postie-pos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Postie POS - Offline retail point-of-sale desktop app",
   "main": "out/main/index.js",
   "author": "An",
@@ -8,11 +8,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "postinstall": "echo 'Postie: skipping electron-rebuild (better-sqlite3 prebuilt for Node; rebuild only needed for Electron runtime at package time)'",
+    "postinstall": "echo 'Postie: skipping electron-rebuild...'",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "db:init": "electron . --init-db",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "dist": "npm run build && electron-builder --win",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.json"
   },
@@ -23,7 +24,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.24.0",
-    "tailwind-animate": "^0.2.10",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -36,6 +36,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.5.2",
     "electron": "^33.4.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "postcss": "^8.5.19",
     "react": "^18.3.1",
@@ -45,5 +46,32 @@
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vite": "^5.4.14"
+  },
+  "build": {
+    "appId": "com.anphm.postiepos",
+    "productName": "Postie POS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "db/schema.sql",
+        "to": "schema.sql"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

@@ -5,16 +5,20 @@
 //  (React) is loaded from the Vite dev server in development, or from the
 //  built file in production.
 //
-//  Special mode: `electron . --init-db [--fresh] [--password <pw>]`
-//  Runs the DB initializer inside the Electron process (required because
-//  better-sqlite3 is rebuilt for the Electron ABI, not Node's) and exits
-//  without opening a window.
+//  Normal launch (no special argv): always registers IPC and opens the
+//  window, whether or not the DB exists yet. The renderer checks
+//  `db:needsSetup` and shows FirstRunSetup if the DB hasn't been created —
+//  this is what makes a freshly downloaded .exe work with no manual step.
+//
+//  `electron . --init-db [--fresh] [--password <pw>]` remains as a dev-only
+//  CLI shortcut, now using the *same* path resolution as the normal app
+//  (imported from connection.ts) so the two can never drift apart again.
 // ============================================================================
 
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpc } from './ipc.js'
-import { closeDb } from './db/connection.js'
+import { closeDb, resolveDbPath, resolveSchemaPath } from './db/connection.js'
 
 async function runInitDbMode(): Promise<void> {
   const argv = process.argv.slice(process.argv.indexOf('--init-db') + 1)
@@ -23,16 +27,13 @@ async function runInitDbMode(): Promise<void> {
   const pwIdx = argv.indexOf('--password')
   if (pwIdx !== -1) password = argv[pwIdx + 1] ?? null
 
-  // Inline the init logic so we don't have to share a module between Node-tsx
-  // and Electron; the schema + admin seeding is small enough to keep here.
   const { readFileSync, existsSync, unlinkSync } = await import('node:fs')
-  const { resolve } = await import('node:path')
   const { createInterface } = await import('node:readline')
   const Database = (await import('better-sqlite3')).default
   const bcrypt = (await import('bcryptjs')).default
 
-  const schemaPath = resolve(__dirname, '../../db/schema.sql')
-  const dbPath = resolve(app.getAppPath(), 'postie.db')
+  const schemaPath = resolveSchemaPath()
+  const dbPath = resolveDbPath()
 
   if (fresh && existsSync(dbPath)) {
     for (const suffix of ['', '-wal', '-shm', '-journal']) {
@@ -65,17 +66,15 @@ async function runInitDbMode(): Promise<void> {
   app.exit(0)
 }
 
-// Enable more verbose logs in development.
 const isDev = !app.isPackaged
 
 async function runTestLoginMode(): Promise<void> {
   const argv = process.argv.slice(process.argv.indexOf('--test-login') + 1)
   const password = argv[0] ?? ''
-  const { resolve } = await import('node:path')
   const Database = (await import('better-sqlite3')).default
   const bcrypt = (await import('bcryptjs')).default
 
-  const dbPath = resolve(app.getAppPath(), 'postie.db')
+  const dbPath = resolveDbPath()
   const db = new Database(dbPath)
   const u = db.prepare(
     'SELECT id, username, password_hash, display_name, role, is_active FROM users WHERE username = ?'
@@ -118,7 +117,6 @@ function createWindow(): void {
 
   win.on('ready-to-show', () => win.show())
 
-  // Open external links in the default browser, not inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
@@ -133,8 +131,6 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  // --init-db mode: run the DB initializer inside Electron (better-sqlite3
-  // is rebuilt for the Electron ABI, not Node's), then quit without a window.
   if (process.argv.includes('--init-db')) {
     try {
       await runInitDbMode()
@@ -145,9 +141,6 @@ app.whenReady().then(async () => {
     return
   }
 
-  // --test-login <password>: verify admin credentials. Diagnostic mode that
-  // loads the DB (which Node cannot, due to the Electron ABI) and prints
-  // whether the given password matches the admin hash. Exits without a window.
   if (process.argv.includes('--test-login')) {
     try {
       await runTestLoginMode()
