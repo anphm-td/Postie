@@ -68,36 +68,6 @@ async function runInitDbMode(): Promise<void> {
 
 const isDev = !app.isPackaged
 
-async function runTestLoginMode(): Promise<void> {
-  const argv = process.argv.slice(process.argv.indexOf('--test-login') + 1)
-  const password = argv[0] ?? ''
-  const Database = (await import('better-sqlite3')).default
-  const bcrypt = (await import('bcryptjs')).default
-
-  const dbPath = resolveDbPath()
-  const db = new Database(dbPath)
-  const u = db.prepare(
-    'SELECT id, username, password_hash, display_name, role, is_active FROM users WHERE username = ?'
-  ).get('admin') as
-    | { id: number; username: string; password_hash: string; display_name: string; role: number; is_active: number }
-    | undefined
-
-  if (!u) {
-    console.log('FAIL: admin user not found in DB')
-    db.close(); app.exit(1); return
-  }
-
-  console.log('User row:', { id: u.id, username: u.username, display_name: u.display_name, role: u.role, is_active: u.is_active })
-  console.log('Hash prefix:', u.password_hash.slice(0, 25) + '...')
-  console.log('---')
-  console.log(`Login "${password}":`, bcrypt.compareSync(password, u.password_hash) ? 'OK ✓' : 'FAIL ✗')
-  console.log('Login "admin123":', bcrypt.compareSync('admin123', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
-  console.log('Login "admin":', bcrypt.compareSync('admin', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
-  console.log('Login "" (empty):', bcrypt.compareSync('', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
-  db.close()
-  app.exit(0)
-}
-
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -136,16 +106,6 @@ app.whenReady().then(async () => {
       await runInitDbMode()
     } catch (err) {
       console.error('[init-db] FAILED:', err)
-      app.exit(1)
-    }
-    return
-  }
-
-  if (process.argv.includes('--test-login')) {
-    try {
-      await runTestLoginMode()
-    } catch (err) {
-      console.error('[test-login] FAILED:', err)
       app.exit(1)
     }
     return

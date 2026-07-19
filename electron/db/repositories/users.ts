@@ -60,17 +60,3 @@ export function getById(id: number): User | undefined {
   ).get(id) as User | undefined
 }
 
-/**
- * Return the first active admin user, without password verification.
- * Used for the auto-login flow (dev / single-operator mode) where the
- * register opens straight into the sales screen. NOT a security boundary.
- */
-export function getDefaultAdmin(): User | undefined {
-  return getDb().prepare(
-    `SELECT id, username, display_name, role, is_active, created_at
-       FROM users
-      WHERE role = 0 AND is_active = 1
-      ORDER BY id
-      LIMIT 1`
-  ).get() as User | undefined
-}

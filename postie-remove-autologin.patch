@@ -1,0 +1,153 @@
+diff --git a/electron/db/repositories/users.ts b/electron/db/repositories/users.ts
+index 2800bc1..35f2293 100644
+--- a/electron/db/repositories/users.ts
++++ b/electron/db/repositories/users.ts
+@@ -60,17 +60,3 @@ export function getById(id: number): User | undefined {
+   ).get(id) as User | undefined
+ }
+ 
+-/**
+- * Return the first active admin user, without password verification.
+- * Used for the auto-login flow (dev / single-operator mode) where the
+- * register opens straight into the sales screen. NOT a security boundary.
+- */
+-export function getDefaultAdmin(): User | undefined {
+-  return getDb().prepare(
+-    `SELECT id, username, display_name, role, is_active, created_at
+-       FROM users
+-      WHERE role = 0 AND is_active = 1
+-      ORDER BY id
+-      LIMIT 1`
+-  ).get() as User | undefined
+-}
+diff --git a/electron/ipc.ts b/electron/ipc.ts
+index 98c21c5..bceb027 100644
+--- a/electron/ipc.ts
++++ b/electron/ipc.ts
+@@ -53,7 +53,6 @@ export function registerIpc(): void {
+   ipcMain.handle('users:login', (_e, username: string, password: string) =>
+     usersRepo.login(username, password)
+   )
+-  ipcMain.handle('users:autoLogin', () => usersRepo.getDefaultAdmin())
+   ipcMain.handle('users:list', () => usersRepo.listAll())
+   ipcMain.handle('users:getById', (_e, id: number) => usersRepo.getById(id))
+ 
+diff --git a/electron/main.ts b/electron/main.ts
+index bd84503..5759b7b 100644
+--- a/electron/main.ts
++++ b/electron/main.ts
+@@ -68,36 +68,6 @@ async function runInitDbMode(): Promise<void> {
+ 
+ const isDev = !app.isPackaged
+ 
+-async function runTestLoginMode(): Promise<void> {
+-  const argv = process.argv.slice(process.argv.indexOf('--test-login') + 1)
+-  const password = argv[0] ?? ''
+-  const Database = (await import('better-sqlite3')).default
+-  const bcrypt = (await import('bcryptjs')).default
+-
+-  const dbPath = resolveDbPath()
+-  const db = new Database(dbPath)
+-  const u = db.prepare(
+-    'SELECT id, username, password_hash, display_name, role, is_active FROM users WHERE username = ?'
+-  ).get('admin') as
+-    | { id: number; username: string; password_hash: string; display_name: string; role: number; is_active: number }
+-    | undefined
+-
+-  if (!u) {
+-    console.log('FAIL: admin user not found in DB')
+-    db.close(); app.exit(1); return
+-  }
+-
+-  console.log('User row:', { id: u.id, username: u.username, display_name: u.display_name, role: u.role, is_active: u.is_active })
+-  console.log('Hash prefix:', u.password_hash.slice(0, 25) + '...')
+-  console.log('---')
+-  console.log(`Login "${password}":`, bcrypt.compareSync(password, u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-  console.log('Login "admin123":', bcrypt.compareSync('admin123', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-  console.log('Login "admin":', bcrypt.compareSync('admin', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-  console.log('Login "" (empty):', bcrypt.compareSync('', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-  db.close()
+-  app.exit(0)
+-}
+-
+ function createWindow(): void {
+   const win = new BrowserWindow({
+     width: 1280,
+@@ -141,16 +111,6 @@ app.whenReady().then(async () => {
+     return
+   }
+ 
+-  if (process.argv.includes('--test-login')) {
+-    try {
+-      await runTestLoginMode()
+-    } catch (err) {
+-      console.error('[test-login] FAILED:', err)
+-      app.exit(1)
+-    }
+-    return
+-  }
+-
+   registerIpc()
+   createWindow()
+ 
+diff --git a/electron/preload.ts b/electron/preload.ts
+index a831b3c..54ebb37 100644
+--- a/electron/preload.ts
++++ b/electron/preload.ts
+@@ -36,7 +36,6 @@ export interface PostieAPI {
+   }
+   users: {
+     login: (username: string, password: string) => Promise<User | null>
+-    autoLogin: () => Promise<User | undefined>
+     getById: (id: number) => Promise<User | undefined>
+     list: () => Promise<User[]>
+   }
+@@ -88,7 +87,6 @@ const api: PostieAPI = {
+   },
+   users: {
+     login: (u, p) => ipcRenderer.invoke('users:login', u, p),
+-    autoLogin: () => ipcRenderer.invoke('users:autoLogin'),
+     getById: (id) => ipcRenderer.invoke('users:getById', id),
+     list: () => ipcRenderer.invoke('users:list')
+   },
+diff --git a/electron/test-login.ts b/electron/test-login.ts
+deleted file mode 100644
+index cc6474f..0000000
+--- a/electron/test-login.ts
++++ /dev/null
+@@ -1,35 +0,0 @@
+-// One-off: verify admin login from inside Electron (better-sqlite3 is built
+-// for the Electron ABI). Run with: npx electron . --test-login <password>
+-import { app } from 'electron'
+-import { resolve } from 'node:path'
+-import Database from 'better-sqlite3'
+-import bcrypt from 'bcryptjs'
+-
+-app.whenReady().then(async () => {
+-  const argv = process.argv.slice(process.argv.indexOf('--test-login') + 1)
+-  const password = argv[0] ?? ''
+-  const dbPath = resolve(app.getAppPath(), 'postie.db')
+-
+-  try {
+-    const db = new Database(dbPath)
+-    const u = db.prepare('SELECT id, username, password_hash, display_name, role, is_active FROM users WHERE username = ?').get('admin') as
+-      | { id: number; username: string; password_hash: string; display_name: string; role: number; is_active: number }
+-      | undefined
+-
+-    if (!u) {
+-      console.log('FAIL: admin user not found in DB')
+-      app.exit(1); return
+-    }
+-
+-    console.log('User row:', { id: u.id, username: u.username, display_name: u.display_name, role: u.role, is_active: u.is_active })
+-    console.log('Hash prefix:', u.password_hash.slice(0, 25) + '...')
+-    console.log('---')
+-    console.log(`Login "${password}":`, bcrypt.compareSync(password, u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-    console.log('Login "admin123":', bcrypt.compareSync('admin123', u.password_hash) ? 'OK ✓' : 'FAIL ✗')
+-    db.close()
+-    app.exit(0)
+-  } catch (err) {
+-    console.error('ERROR:', err)
+-    app.exit(1)
+-  }
+-})
