@@ -1,162 +1,100 @@
 // ============================================================================
-//  Postie POS - Reports screen (revenue summary)
+//  Postie POS - Màn BÁO CÁO (routes/Reports.tsx)
 // ----------------------------------------------------------------------------
-//  Summarizes sales: choose "this shift" (orders on the active shift) or
-//  "50 most recent" orders. Shows summary cards (order count, total revenue,
-//  collected, outstanding) computed client-side from order headers, plus a
-//  table of the orders. Payments detail isn't needed — paid_amount on the
-//  header is enough for collected/outstanding.
+//  Tabs: Tổng quan (thẻ số liệu + biểu đồ theo ngày + phương thức CK +
+//  top bán chạy) · Theo ngày · Theo ca · Nhân viên · Sản phẩm · Nhóm hàng ·
+//  Tồn kho (+tồn thấp) · Lịch sử ca (thu/chi tiền trong ca, đối ca).
+//  Chọn khoảng thời gian: preset hoặc tùy chọn — áp cho mọi tab doanh thu;
+//  nút làm mới. Tồn kho & Lịch sử ca không theo khoảng (dữ liệu hiện tại).
+//  Toàn bộ dữ liệu qua api.reports:* / api.shifts:* (preload API).
 // ============================================================================
 
-import { useCallback, useEffect, useState } from 'react'
-import { useAuth } from '@renderer/context/AuthContext'
-import { api } from '@renderer/lib/api'
-import { formatVnd, formatDateTime } from '@renderer/lib/format'
-import { Badge } from '@renderer/components/ui/badge'
-import { Card, CardContent } from '@renderer/components/ui/card'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@renderer/components/ui/table'
-import type { Order, OrderStatus } from '@shared/types'
+import { useState } from 'react'
+import {
+  BarChart3,
+  CalendarDays,
+  Clock,
+  History,
+  Package,
+  RefreshCw,
+  ShoppingCart,
+  TrendingUp,
+  Users
+} from 'lucide-react'
+import { Button } from '@renderer/components/ui/button'
+import { SegmentedTabs } from '@renderer/components/reports/SegmentedTabs'
+import type { TabDef } from '@renderer/components/reports/SegmentedTabs'
+import {
+  DateRangePicker,
+  describeRange,
+  presetRange
+} from '@renderer/components/reports/DateRangePicker'
+import type { DateRange } from '@renderer/components/reports/DateRangePicker'
+import { OverviewPanel } from '@renderer/components/reports/OverviewPanel'
+import {
+  DailyPanel,
+  ShiftPanel,
+  UserPanel,
+  ProductPanel,
+  CategoryPanel
+} from '@renderer/components/reports/RevenuePanels'
+import { StockPanel } from '@renderer/components/reports/StockPanel'
+import { ShiftHistoryPanel } from '@renderer/components/shifts/ShiftHistoryPanel'
 
-type Filter = 'shift' | 'recent'
-
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  0: 'Chờ',
-  1: 'Đã thanh toán',
-  2: 'Đã hủy',
-  3: 'Hoàn tiền',
-  4: 'Thanh toán một phần'
-}
-
-function statusVariant(s: OrderStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (s === 1) return 'default'
-  if (s === 2) return 'destructive'
-  if (s === 4) return 'secondary'
-  return 'outline'
-}
+const TABS: TabDef[] = [
+  { id: 'overview', label: 'Tổng quan', icon: BarChart3 },
+  { id: 'daily', label: 'Theo ngày', icon: CalendarDays },
+  { id: 'shift', label: 'Theo ca', icon: Clock },
+  { id: 'user', label: 'Nhân viên', icon: Users },
+  { id: 'product', label: 'Sản phẩm', icon: ShoppingCart },
+  { id: 'category', label: 'Nhóm hàng', icon: TrendingUp },
+  { id: 'stock', label: 'Tồn kho', icon: Package },
+  { id: 'history', label: 'Lịch sử ca', icon: History }
+]
 
 export function Reports() {
-  const { activeShift } = useAuth()
-  const [filter, setFilter] = useState<Filter>('shift')
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
+  const [range, setRange] = useState<DateRange>(() => presetRange('today'))
+  const [tab, setTab] = useState('overview')
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      if (filter === 'shift' && activeShift) {
-        setOrders(await api.orders.listByShift(activeShift.id))
-      } else {
-        setOrders(await api.orders.listRecent(50))
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [filter, activeShift])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  // If no active shift and the user is on "this shift", fall back to recent.
-  const effectiveFilter: Filter = filter === 'shift' && !activeShift ? 'recent' : filter
-
-  const count = orders.length
-  const totalRevenue = orders.reduce((s, o) => s + o.total, 0)
-  const collected = orders.reduce((s, o) => s + o.paid_amount, 0)
-  const outstanding = Math.max(0, totalRevenue - collected)
+  const needsRange = tab !== 'stock' && tab !== 'history'
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <h1 className="text-2xl font-semibold">Báo cáo doanh thu</h1>
-        <div className="flex gap-1 rounded-md border p-1">
-          <button
-            className={`rounded px-3 py-1 text-sm transition-colors ${
-              effectiveFilter === 'shift' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-            }`}
-            onClick={() => setFilter('shift')}
-            disabled={!activeShift}
-            title={activeShift ? undefined : 'Chưa có ca đang mở'}
-          >
-            Ca hiện tại
-          </button>
-          <button
-            className={`rounded px-3 py-1 text-sm transition-colors ${
-              effectiveFilter === 'recent' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-            }`}
-            onClick={() => setFilter('recent')}
-          >
-            50 đơn gần nhất
-          </button>
+      <div className="border-b bg-card px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold">Báo cáo</h1>
+            <p className="text-sm text-muted-foreground">{describeRange(range)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {needsRange && <DateRangePicker value={range} onChange={setRange} />}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setRefreshKey((k) => k + 1)}
+              title="Làm mới số liệu"
+              aria-label="Làm mới số liệu"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="mt-3">
+          <SegmentedTabs tabs={TABS} active={tab} onChange={setTab} />
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <SummaryCard label="Số đơn" value={String(count)} />
-          <SummaryCard label="Tổng doanh thu" value={formatVnd(totalRevenue)} />
-          <SummaryCard label="Đã thu" value={formatVnd(collected)} />
-          <SummaryCard
-            label="Còn nợ"
-            value={formatVnd(outstanding)}
-            highlight={outstanding > 0}
-          />
-        </div>
-
-        {/* Orders table */}
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Hóa đơn</TableHead>
-                <TableHead>Thời gian</TableHead>
-                <TableHead className="text-right">Tổng</TableHead>
-                <TableHead className="text-right">Đã thu</TableHead>
-                <TableHead>Trạng thái</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
-                    Đang tải…
-                  </TableCell>
-                </TableRow>
-              ) : orders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
-                    Chưa có đơn hàng nào.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                orders.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-medium">#{o.invoice_no}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatDateTime(o.created_at)}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatVnd(o.total)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatVnd(o.paid_amount)}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusVariant(o.status)}>{STATUS_LABEL[o.status]}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+      <div className="flex-1 overflow-auto p-6">
+        {tab === 'overview' && <OverviewPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'daily' && <DailyPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'shift' && <ShiftPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'user' && <UserPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'product' && <ProductPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'category' && <CategoryPanel range={range} refreshKey={refreshKey} />}
+        {tab === 'stock' && <StockPanel refreshKey={refreshKey} />}
+        {tab === 'history' && <ShiftHistoryPanel key={refreshKey} />}
       </div>
     </div>
-  )
-}
-
-function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-sm text-muted-foreground">{label}</div>
-        <div className={`mt-1 text-xl font-bold ${highlight ? 'text-destructive' : ''}`}>{value}</div>
-      </CardContent>
-    </Card>
   )
 }

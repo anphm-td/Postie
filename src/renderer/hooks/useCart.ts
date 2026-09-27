@@ -1,11 +1,3 @@
-// ============================================================================
-//  Postie POS - Shopping cart hook
-// ----------------------------------------------------------------------------
-//  Keeps cart state for the Register screen. Stock is enforced client-side:
-//  you can't add more units of a product than its `stock`, and out-of-stock
-//  products can't be added at all. All money is cents (matching the DB).
-// ============================================================================
-
 import { useCallback, useMemo, useState } from 'react'
 import type { Product } from '@shared/types'
 
@@ -17,7 +9,6 @@ export interface CartItem {
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([])
 
-  /** Clamp a quantity to [1, product.stock]. Returns 0 if out of stock. */
   const clampQty = (product: Product, qty: number): number => {
     const max = Math.max(0, product.stock)
     if (max <= 0) return 0
@@ -71,5 +62,8 @@ export function useCart() {
     [items]
   )
 
-  return { items, add, remove, setQty, inc, dec, clear, setItems, subtotalCents }
+  return useMemo(
+    () => ({ items, add, remove, setQty, inc, dec, clear, setItems, subtotalCents }),
+    [items, add, remove, setQty, inc, dec, clear, setItems, subtotalCents]
+  )
 }

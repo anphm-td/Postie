@@ -1,24 +1,15 @@
-// ============================================================================
-//  Postie POS - Open shift screen
-// ----------------------------------------------------------------------------
-//  Shown when the logged-in cashier has no active shift. The cashier enters
-//  the opening cash float (tiền đầu ca trong két), then api.shifts.open
-//  creates the shift row. On success AuthContext.refreshShift() picks it up
-//  and App.tsx routes into the Register.
-// ============================================================================
-
 import React, { useState } from 'react'
+import { Vault } from 'lucide-react'
 import { useAuth } from '@renderer/context/AuthContext'
 import { api } from '@renderer/lib/api'
-import { formatVnd } from '@renderer/lib/format'
+import { formatVnd, dongToCents } from '@renderer/lib/format'
 import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
+import { MoneyInput } from '@renderer/components/ui/money-input'
 import { Label } from '@renderer/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@renderer/components/ui/card'
 
 export function ShiftOpen() {
   const { user, refreshShift } = useAuth()
-  // Input in đồng (not cents) for friendlier entry; converted on submit.
   const [dongStr, setDongStr] = useState('0')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -26,57 +17,66 @@ export function ShiftOpen() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!user) return
-    const dong = Number(dongStr.replace(/[^\d]/g, ''))
-    if (!Number.isFinite(dong) || dong < 0) {
-      setError('Tiền đầu ca không hợp lệ.')
-      return
-    }
+    if (!user || submitting) return
+    const cents = dongToCents(dongStr)
     setSubmitting(true)
     try {
-      await api.shifts.open(user.id, Math.round(dong * 100))
+      await api.shifts.open(user.id, cents)
       await refreshShift()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không mở được ca.')
+      setError(err instanceof Error ? err.message : 'Không mở được ca. Thử lại nhé.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const previewCents = Math.round(Number(dongStr.replace(/[^\d]/g, '') || 0) * 100)
-
   return (
-    <div className="flex h-screen items-center justify-center bg-secondary/30">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Mở ca làm việc</CardTitle>
-          <CardDescription>
-            Nhập số tiền mặt đầu ca trong két sổ, {user?.display_name}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="opening">Tiền đầu ca (₫)</Label>
-              <Input
-                id="opening"
-                inputMode="numeric"
-                value={dongStr}
-                onChange={(e) => setDongStr(e.target.value)}
-                placeholder="0"
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                Tương đương: {formatVnd(previewCents)}
-              </p>
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Đang mở ca…' : 'Mở ca'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="flex h-screen items-center justify-center bg-background">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary font-bold text-primary-foreground shadow-md">
+            <Vault className="h-7 w-7" />
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold">Mở ca làm việc</div>
+            <div className="text-xs text-muted-foreground">Xin chào, {user?.display_name}</div>
+          </div>
+        </div>
+        <Card className="shadow-md">
+          <CardHeader>
+            <CardTitle className="text-base">Tiền đầu ca</CardTitle>
+            <CardDescription>
+              Nhập số tiền mặt đang có trong két lúc mở ca. Cuối ca sẽ đối chiếu lại.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="opening">Tiền mặt trong két (₫)</Label>
+                <MoneyInput
+                  id="opening"
+                  value={dongStr === '0' ? '' : dongStr}
+                  onValueChange={(d) => setDongStr(d || '0')}
+                  placeholder="0"
+                  className="h-12 text-xl"
+                  autoFocus
+                  aria-label="Tiền đầu ca"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tương đương:{' '}
+                  <span className="font-mono font-semibold text-foreground">
+                    {formatVnd(dongToCents(dongStr))}
+                  </span>
+                </p>
+              </div>
+              {error && <p className="text-sm leading-relaxed text-destructive">{error}</p>}
+              <Button type="submit" className="h-11 w-full" disabled={submitting}>
+                {submitting ? 'Đang mở ca…' : 'Mở ca & bắt đầu bán'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -1,21 +1,12 @@
-// ============================================================================
-//  Postie POS - Product search bar (Register)
-// ----------------------------------------------------------------------------
-//  Searches by product name OR barcode with a 250ms debounce, and reports the
-//  results up so ProductGrid can render them. Pressing Enter first tries an
-//  exact barcode lookup (for barcode scanners / typed codes) and adds the match
-//  straight to the cart; otherwise it adds the first search result. The
-//  `onAddToCart` callback fires whenever a product should be added directly.
-// ============================================================================
-
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Search } from 'lucide-react'
 import { api } from '@renderer/lib/api'
 import type { Product } from '@shared/types'
 import { Input } from '@renderer/components/ui/input'
+import { beep } from '@renderer/components/pos/sound'
 
 interface ProductSearchProps {
-  /** Called with results and whether a search query is currently active. */
   onResults: (items: Product[], searching: boolean) => void
   onAddToCart: (product: Product) => void
 }
@@ -47,34 +38,32 @@ export function ProductSearch({ onResults, onAddToCart }: ProductSearchProps) {
   async function handleEnter() {
     const q = query.trim()
     if (!q) return
-    // Barcode scanners fire Enter after the code; try an exact match first.
     try {
-      const exact = await api.products.getByBarcode(q)
+      const exact = await api.products.getByBarcode(q).catch(() => undefined)
       if (exact && exact.is_active === 1) {
         onAddToCart(exact)
         setQuery('')
         onResults([], false)
         return
       }
-    } catch {
-      /* fall through to name search */
-    }
-    // No exact barcode match: add the first search result if any.
-    try {
       const res = await api.products.list({ search: q, activeOnly: true, pageSize: 1 })
       if (res.items.length > 0) {
         onAddToCart(res.items[0])
         setQuery('')
         onResults([], false)
+      } else {
+        // Quét/tìm mã không khớp sản phẩm nào — âm báo lỗi + toast (P0.2).
+        toast.error(`Không tìm thấy sản phẩm "${q}"`)
+        beep('error')
       }
     } catch {
-      /* ignore */
+      onResults([], true)
     }
   }
 
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -82,7 +71,7 @@ export function ProductSearch({ onResults, onAddToCart }: ProductSearchProps) {
           if (e.key === 'Enter') handleEnter()
         }}
         placeholder="Tìm tên sản phẩm hoặc quét mã vạch…"
-        className="pl-9"
+        className="h-11 pl-9 text-base"
         autoFocus
       />
     </div>

@@ -14,11 +14,10 @@
     "verbatimModuleSyntax": false,
     "baseUrl": ".",
     "paths": {
-      "@electron/*": ["electron/*"],
-      "@db/*": ["db/*"]
+      "@shared/*": ["src/shared/*"]
     },
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts", "db/**/*.ts", "electron.vite.config.ts"],
-  "exclude": ["node_modules", "out", "dist-electron", "src"]
+  "include": ["src/backend/**/*.ts", "src/preload/**/*.ts", "electron.vite.config.ts"],
+  "exclude": ["node_modules", "out", "dist-electron", "src/renderer"]
 }

@@ -1,13 +1,3 @@
-// ============================================================================
-//  Postie POS - Auth context
-// ----------------------------------------------------------------------------
-//  Real login: the cashier enters username + password, verified against the
-//  bcrypt hash in the DB via api.users.login. On success the user id is saved
-//  to localStorage so reopening the app restores the session without
-//  re-entering credentials (api.users.getById). logout() clears both the
-//  saved session and the in-memory state, returning to the Login screen.
-// ============================================================================
-
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { api } from '@renderer/lib/api'
 import type { User, Shift } from '@shared/types'
@@ -17,7 +7,7 @@ const SESSION_KEY = 'postie.session.userId'
 interface AuthState {
   user: User | null
   activeShift: Shift | null
-  loading: boolean          // true during initial session restore
+  loading: boolean
   refreshShift: () => Promise<void>
   login: (username: string, password: string) => Promise<boolean>
   logout: () => void
@@ -30,7 +20,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeShift, setActiveShift] = useState<Shift | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // On mount, restore a saved session (if any) by fetching the user by id.
   useEffect(() => {
     let cancelled = false
     const savedId = Number(localStorage.getItem(SESSION_KEY))
@@ -55,7 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user])
 
-  // Whenever the user changes, re-fetch their active shift.
   useEffect(() => { void refreshShift() }, [user, refreshShift])
 
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {

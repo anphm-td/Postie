@@ -1,14 +1,8 @@
-// ============================================================================
-//  Postie POS - Stock adjust dialog (Products screen)
-// ----------------------------------------------------------------------------
-//  Adds units to a product's stock (receiving inventory). Uses the stock-
-//  movements path (type=2 purchase) so the trigger syncs products.stock and
-//  the audit trail is preserved. Shows the current stock and a live preview
-//  of the resulting stock after the change.
-// ============================================================================
-
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { PackagePlus } from 'lucide-react'
 import { api } from '@renderer/lib/api'
+import { parseDong } from '@renderer/lib/format'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
@@ -29,11 +23,6 @@ interface StockAdjustDialogProps {
   onUpdated: () => void
 }
 
-function toNumber(raw: string): number {
-  const n = Number(raw.replace(/[^\d]/g, ''))
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
-}
-
 export function StockAdjustDialog({ product, userId, onClose, onUpdated }: StockAdjustDialogProps) {
   const [qty, setQty] = useState('1')
   const [note, setNote] = useState('')
@@ -51,7 +40,7 @@ export function StockAdjustDialog({ product, userId, onClose, onUpdated }: Stock
 
   if (!product) return null
 
-  const addQty = toNumber(qty)
+  const addQty = parseDong(qty)
   const newStock = product.stock + addQty
 
   async function handleSubmit(e: React.FormEvent) {
@@ -63,17 +52,23 @@ export function StockAdjustDialog({ product, userId, onClose, onUpdated }: Stock
     }
     setSubmitting(true)
     try {
-      await api.products.adjustStock({
+      // manualAdjust (type=3 điều chỉnh) — KHÔNG dùng type=2 (nhập theo phiếu):
+      // purchases.getReceivedLines suy ra số đã nhận của phiếu nhập từ
+      // stock_movements type=2 AND note='PO#<id>', ghi type=2 với note tự do
+      // (vd "PO#1") sẽ nhiễm hạn ngạch nhận hàng của phiếu đó.
+      await api.products.manualAdjust({
         productId: product!.id,
         delta: addQty,
-        type: 2, // purchase / receiving
-        note: note.trim() || `Nhập thêm ${addQty}`,
-        userId
+        userId,
+        note: note.trim() || `Nhập thêm ${addQty}`
       })
+      toast.success(`Đã nhập thêm ${addQty} ${product!.name}`)
       onUpdated()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể cập nhật tồn kho.')
+      const msg = err instanceof Error ? err.message : 'Không cập nhật được tồn kho. Thử lại nhé.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }
@@ -88,9 +83,13 @@ export function StockAdjustDialog({ product, userId, onClose, onUpdated }: Stock
     >
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Nhập thêm hàng</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <PackagePlus className="h-5 w-5 text-emerald-700" />
+            Nhập thêm hàng
+          </DialogTitle>
           <DialogDescription>
-            {product!.name} — đang tồn <b className="text-foreground">{product!.stock}</b>
+            {product!.name} — đang tồn{' '}
+            <b className="font-mono text-foreground">{product!.stock}</b>
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -100,11 +99,12 @@ export function StockAdjustDialog({ product, userId, onClose, onUpdated }: Stock
               id="qty"
               inputMode="numeric"
               value={qty}
-              onChange={(e) => setQty(e.target.value)}
+              onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, ''))}
+              className="h-11 font-mono text-lg"
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
-              Tồn sau khi nhập: <b className="text-foreground">{newStock}</b>
+              Tồn sau khi nhập: <b className="font-mono text-foreground">{newStock}</b>
             </p>
           </div>
           <div className="space-y-2">
@@ -116,7 +116,7 @@ export function StockAdjustDialog({ product, userId, onClose, onUpdated }: Stock
               placeholder="VD: Nhập từ nhà cung cấp A"
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm leading-relaxed text-destructive">{error}</p>}
           <DialogFooter className="gap-2 sm:gap-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Hủy

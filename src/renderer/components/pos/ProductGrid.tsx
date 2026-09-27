@@ -1,11 +1,3 @@
-// ============================================================================
-//  Postie POS - Product grid (Register, left panel)
-// ----------------------------------------------------------------------------
-//  Renders a responsive grid of product cards. Clicking a card adds it to the
-//  cart. Out-of-stock products are dimmed and disabled. Stock is shown as a
-//  small badge so the cashier can see availability at a glance.
-// ============================================================================
-
 import { formatVnd } from '@renderer/lib/format'
 import type { Product } from '@shared/types'
 import { Badge } from '@renderer/components/ui/badge'
@@ -19,8 +11,9 @@ interface ProductGridProps {
 export function ProductGrid({ products, onAdd }: ProductGridProps) {
   if (products.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-10 text-center text-muted-foreground">
-        Nhập tên hoặc mã vạch để tìm sản phẩm.
+      <div className="flex flex-1 flex-col items-center justify-center gap-1 p-10 text-center text-muted-foreground">
+        <p className="font-medium">Không tìm thấy sản phẩm</p>
+        <p className="text-sm">Thử tên khác hoặc quét mã vạch.</p>
       </div>
     )
   }
@@ -30,7 +23,7 @@ export function ProductGrid({ products, onAdd }: ProductGridProps) {
       className="flex-1 overflow-y-auto p-3"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
         gap: '12px',
         alignContent: 'start'
       }}
@@ -43,14 +36,18 @@ export function ProductGrid({ products, onAdd }: ProductGridProps) {
             disabled={out}
             onClick={() => onAdd(p)}
             className={cn(
-              'flex flex-col rounded-lg border bg-card p-3 text-left transition-all hover:border-primary hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:shadow-none'
+              'flex flex-col rounded-xl border bg-card p-3.5 text-left shadow-sm transition-all',
+              'hover:-translate-y-0.5 hover:border-primary hover:shadow-md',
+              'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-border disabled:hover:shadow-sm'
             )}
           >
-            <div className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-tight">
+            <div className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug">
               {p.name}
             </div>
-            <div className="mt-2 text-lg font-bold text-primary">{formatVnd(p.price)}</div>
-            <div className="mt-1">
+            <div className="mt-2 font-mono text-lg font-bold tabular-nums text-primary">
+              {formatVnd(p.price)}
+            </div>
+            <div className="mt-1.5">
               {out ? (
                 <Badge variant="destructive">Hết hàng</Badge>
               ) : (

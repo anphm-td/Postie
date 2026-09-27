@@ -16,10 +16,10 @@
     "paths": {
       "@renderer/*": ["./src/renderer/*"],
       "@shared/*": ["./src/shared/*"],
-      "@electron/*": ["./electron/*"]
+      "@preload": ["./src/preload/index.ts"]
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "out", "dist-electron"]
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/shared/**/*.ts"],
+  "exclude": ["node_modules", "out", "dist-electron", "src/backend", "src/preload"]
 }

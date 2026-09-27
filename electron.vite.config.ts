@@ -7,19 +7,19 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'electron/main.ts') },
+        input: { index: resolve(__dirname, 'src/backend/index.ts') },
         external: ['better-sqlite3', 'bcrypt']
       }
     },
     resolve: {
-      alias: { '@electron': resolve(__dirname, 'electron') }
+      alias: { '@shared': resolve(__dirname, 'src/shared') }
     }
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: { index: resolve(__dirname, 'electron/preload.ts') },
+        input: { index: resolve(__dirname, 'src/preload/index.ts') },
         output: {
           // Electron preload is loaded via require() (CommonJS). Because
           // package.json has "type": "module", a .js file would be treated
@@ -29,6 +29,9 @@ export default defineConfig({
           inlineDynamicImports: true
         }
       }
+    },
+    resolve: {
+      alias: { '@shared': resolve(__dirname, 'src/shared') }
     }
   },
   renderer: {

@@ -1,0 +1,31 @@
+Postie v2
+
+cấu trúc cũ 
+electron/              → Main process (Node.js, có quyền truy cập DB/hệ thống)
+  main.ts                 - Khởi tạo cửa sổ, vòng đời app
+  preload.ts              - contextBridge: API "an toàn" expose cho renderer
+  ipc.ts                  - Toàn bộ handler IPC (renderer ↔ main)
+  db/connection.ts        - Kết nối SQLite, resolve path, PRAGMA
+  db/repositories/        - 1 module/domain: products, orders, customers, 
+                            users, shifts, payment-methods
+
+src/renderer/           → Giao diện React (KHÔNG có quyền truy cập Node/DB trực tiếp)
+  routes/                 - Register (bán hàng), Products, Reports, 
+                            Login, FirstRunSetup, ShiftOpen
+  components/pos/         - Component nghiệp vụ POS
+  components/ui/          - Radix UI + Tailwind
+  hooks/                   - useCart, useShiftGuard, useSetupGuard
+  context/AuthContext.tsx  - Quản lý đăng nhập
+
+src/shared/             → Type dùng chung giữa main và renderer
+db/schema.sql            → Schema SQLite (nguồn sự thật duy nhất)
+
+để suất cải thiện 
+
+
+- thêm model chạy local để hỗ trợ dự đoán hàng hóa (nếu thiếu thì có thể thiếu
+có thể thêm bằng mã vạch hoặc tên sp):
+    + khi thiếu sản phẩm model sẽ học lại (có thể chụp lại để người dùng train lại)
+- thêm model đọc orc để đọc hóa đơn nhập hàng sau đó thêm vào kho hàng
+- nhập dữ liệu từ file csv 
+- làm thêm frontend lấy file csv
